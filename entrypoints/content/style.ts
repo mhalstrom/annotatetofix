@@ -9,6 +9,15 @@ export const STYLE = `
   position: fixed; pointer-events: none; display: none;
   outline: 2px solid #e5484d; background: rgba(229, 72, 77, 0.12); border-radius: 2px;
 }
+.drag {
+  position: fixed; pointer-events: none; display: none;
+  outline: 2px dashed #e5484d; background: rgba(229, 72, 77, 0.10);
+}
+.area {
+  position: fixed; pointer-events: none; display: none;
+  outline: 2px dashed rgba(229, 72, 77, 0.75); border-radius: 2px;
+}
+.area.missing { display: none !important; }
 .marker {
   position: fixed; pointer-events: auto; cursor: pointer;
   min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px;

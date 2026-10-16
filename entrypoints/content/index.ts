@@ -10,9 +10,12 @@ import {
   notesKey,
   openNotes,
   pageUrl,
+  type Box,
   type Note,
+  type NoteArea,
   type NoteEvent,
 } from '@/utils/note';
+import { boxFromPoints, containerOf, elementRef, elementsInside, isDrag, offsetIn, placeIn } from '@/utils/area';
 import { buildPrompt, numberByPage } from '@/utils/prompt';
 import { elementText, findElement, getSelector } from '@/utils/selector';
 import { STYLE } from './style';
@@ -39,6 +42,8 @@ interface Marker {
   el: Element | null;
   foundBy: string;
   badge: HTMLElement;
+  /** The dashed box of a note on an area. */
+  outline?: HTMLElement;
   item?: HTMLElement;
 }
 
@@ -47,6 +52,25 @@ interface Editing {
   note: Note | null;
   /** 'not-fixed' asks what is still wrong with an earlier note. */
   kind: 'note' | 'not-fixed';
+  /** For a note on a dragged area. */
+  area?: NoteArea;
+}
+
+function viewRect(el: Element): Box {
+  const rect = el.getBoundingClientRect();
+  return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+}
+
+/** Where an area is in the window now: at its place in its element, or at its place on the page when the element is gone. */
+function areaInView(area: NoteArea, el: Element | null): Box {
+  if (el?.isConnected) return placeIn(viewRect(el), area.offset);
+  return { ...area.page, x: area.page.x - scrollX, y: area.page.y - scrollY };
+}
+
+/** The box that a marker, the note box and a screenshot use: the area, or the element. */
+function targetBox(el: Element | null, area: NoteArea | undefined): Box | null {
+  if (area) return areaInView(area, el);
+  return el?.isConnected ? viewRect(el) : null;
 }
 
 const EVENT_WORDS: Record<NoteEvent['type'], string> = {
@@ -96,6 +120,10 @@ function start(): void {
   let notes: Note[] = [];
   let panelOpen = false;
   let checking = false;
+  // A press and a drag in Add note mode draws a box: a note on an area.
+  let drag: { x: number; y: number; moved: boolean } | null = null;
+  /** The click that ends a drag must not also select an element. */
+  let dragEnded = false;
   /** Screenshot data URLs by note id, read once from the background script. */
   const shotCache = new Map<string, string>();
   let picking = false;
@@ -108,6 +136,7 @@ function start(): void {
   const shadow = host.attachShadow({ mode: 'open' });
   const layer = h('div', { className: 'layer' });
   const hover = h('div', { className: 'hover' });
+  const dragBox = h('div', { className: 'drag' });
   const markerLayer = h('div');
 
   const status = h('div', { className: 'status' });
@@ -158,7 +187,7 @@ function start(): void {
     h('div', { className: 'row' }, deleteButton, h('span', { className: 'spacer' }), cancelButton, saveButton),
   );
 
-  layer.append(hover, markerLayer, editor, panel);
+  layer.append(hover, dragBox, markerLayer, editor, panel);
   shadow.append(h('style', {}, STYLE), layer);
   document.documentElement.append(host);
 
@@ -191,12 +220,14 @@ function start(): void {
         marker.el = found.el;
         marker.foundBy = found.foundBy;
       }
-      const rect = marker.el?.getBoundingClientRect();
-      const visible = !!rect && (rect.width > 0 || rect.height > 0);
+      const box = targetBox(marker.el, marker.note.area);
+      const visible = !!box && (box.width > 0 || box.height > 0);
       marker.badge.classList.toggle('missing', !visible);
-      if (rect && visible) {
-        marker.badge.style.left = `${Math.max(0, rect.left)}px`;
-        marker.badge.style.top = `${Math.max(0, rect.top)}px`;
+      marker.outline?.classList.toggle('missing', !visible);
+      if (box && visible) {
+        marker.badge.style.left = `${Math.max(0, box.x)}px`;
+        marker.badge.style.top = `${Math.max(0, box.y)}px`;
+        if (marker.outline) placeBox(marker.outline, box);
       }
     }
     if (editing) placeEditor();
@@ -217,8 +248,10 @@ function start(): void {
           if (checking) flash(marker?.item);
           else openEditor(marker?.el ?? null, note);
         });
+        const outline = note.area ? h('div', { className: 'area' }) : undefined;
+        if (outline) markerLayer.append(outline);
         markerLayer.append(badge);
-        markers.push({ note, number, el: found.el, foundBy: found.foundBy, badge });
+        markers.push({ note, number, el: found.el, foundBy: found.foundBy, badge, outline });
       }
       placeMarkers(false);
     }
@@ -357,34 +390,74 @@ function start(): void {
   function stopPicking(): void {
     if (!picking) return;
     picking = false;
+    drag = null;
     hover.style.display = 'none';
+    dragBox.style.display = 'none';
     addButton.textContent = 'Add note';
     document.documentElement.style.cursor = '';
   }
 
-  function showHover(el: Element): void {
-    const rect = el.getBoundingClientRect();
-    Object.assign(hover.style, {
+  function placeBox(target: HTMLElement, box: Box): void {
+    Object.assign(target.style, {
       display: 'block',
-      left: `${rect.left}px`,
-      top: `${rect.top}px`,
-      width: `${rect.width}px`,
-      height: `${rect.height}px`,
+      left: `${box.x}px`,
+      top: `${box.y}px`,
+      width: `${box.width}px`,
+      height: `${box.height}px`,
     });
+  }
+
+  function showHover(el: Element): void {
+    placeBox(hover, viewRect(el));
+  }
+
+  function finishDrag(x: number, y: number): void {
+    const start = drag!;
+    const box = boxFromPoints(start.x, start.y, x, y);
+    const container = containerOf(document, box, viewRect, (el) => host.contains(el));
+    const area: NoteArea = {
+      page: { ...box, x: box.x + scrollX, y: box.y + scrollY },
+      offset: offsetIn(viewRect(container), box),
+      inside: elementsInside(container, box, viewRect).map(elementRef),
+    };
+    stopPicking();
+    dragEnded = true;
+    openEditor(container, null, 'note', area);
   }
 
   const block = (e: Event) => {
     if (!picking || isOurs(e)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
+    const mouse = e as MouseEvent;
+    if (e.type === 'mousedown' && mouse.button === 0) {
+      drag = { x: mouse.clientX, y: mouse.clientY, moved: false };
+      dragEnded = false;
+    } else if (e.type === 'mouseup' && drag) {
+      if (drag.moved) finishDrag(mouse.clientX, mouse.clientY);
+      else drag = null;
+    }
   };
   for (const type of ['mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick', 'auxclick']) {
     window.addEventListener(type, block, true);
   }
   const onMove = (e: MouseEvent) => {
-    if (picking && !isOurs(e) && e.target instanceof Element) showHover(e.target);
+    if (!picking || isOurs(e)) return;
+    if (drag && (drag.moved || isDrag(drag.x, drag.y, e.clientX, e.clientY))) {
+      drag.moved = true;
+      hover.style.display = 'none';
+      placeBox(dragBox, boxFromPoints(drag.x, drag.y, e.clientX, e.clientY));
+    } else if (e.target instanceof Element) {
+      showHover(e.target);
+    }
   };
   const onClick = (e: MouseEvent) => {
+    if (dragEnded) {
+      dragEnded = false;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
     if (!picking || isOurs(e)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -404,20 +477,25 @@ function start(): void {
 
   // ---- The note box ----------------------------------------------------
 
-  function openEditor(el: Element | null, note: Note | null, kind: Editing['kind'] = 'note'): void {
+  function openEditor(el: Element | null, note: Note | null, kind: Editing['kind'] = 'note', newArea?: NoteArea): void {
     stopPicking();
-    editing = { el, note, kind };
+    const area = newArea ?? note?.area;
+    editing = { el, note, kind, area };
     const tag = note?.tag ?? el?.tagName.toLowerCase() ?? '?';
     const text = note?.text ?? (el ? elementText(el) : '');
-    editorTarget.textContent = `<${tag}>${text ? ` "${text}"` : ''}`;
+    const element = `<${tag}>${text ? ` "${text}"` : ''}`;
+    editorTarget.textContent = area
+      ? `Area ${Math.round(area.page.width)} × ${Math.round(area.page.height)} px in ${element}`
+      : element;
     const notFixed = kind === 'not-fixed';
     editorEarlier.hidden = !notFixed;
     editorEarlier.textContent = notFixed && note ? `Earlier: ${note.note}` : '';
     editorText.placeholder = notFixed ? 'What is still wrong?' : 'What is wrong here?';
     editorText.value = notFixed ? '' : (note?.note ?? '');
-    editorShotLabel.textContent = notFixed && note?.screenshot ? 'New screenshot of the element' : 'Screenshot of the element';
+    const what = area ? 'area' : 'element';
+    editorShotLabel.textContent = notFixed && note?.screenshot ? `New screenshot of the ${what}` : `Screenshot of the ${what}`;
     editorShot.checked = notFixed ? false : (note?.screenshot ?? false);
-    editorShot.disabled = notFixed && !el;
+    editorShot.disabled = notFixed && !el && !area;
     deleteButton.hidden = !note || notFixed;
     editor.hidden = false;
     placeEditor();
@@ -433,29 +511,27 @@ function start(): void {
   function placeEditor(): void {
     const width = 300;
     const height = editor.offsetHeight || 190;
-    const rect = editing?.el?.isConnected ? editing.el.getBoundingClientRect() : null;
-    let left = rect ? rect.left : (innerWidth - width) / 2;
-    let top = rect ? rect.bottom + 8 : (innerHeight - height) / 2;
-    if (rect && top + height > innerHeight) top = rect.top - height - 8;
+    const box = editing ? targetBox(editing.el, editing.area) : null;
+    let left = box ? box.x : (innerWidth - width) / 2;
+    let top = box ? box.y + box.height + 8 : (innerHeight - height) / 2;
+    if (box && top + height > innerHeight) top = box.y - height - 8;
     left = Math.min(Math.max(8, left), innerWidth - width - 8);
     top = Math.min(Math.max(8, top), innerHeight - height - 8);
     editor.style.left = `${left}px`;
     editor.style.top = `${top}px`;
-    if (rect) showHover(editing!.el!);
+    if (box) placeBox(hover, box);
   }
 
-  async function takeShot(noteId: string, el: Element): Promise<boolean> {
+  /** Captures the element, or the area, of a note with a margin around it. */
+  async function takeShot(noteId: string, el: Element | null, area?: NoteArea): Promise<boolean> {
     // The add-on's own UI must not be in the picture.
     host.style.visibility = 'hidden';
     await nextFrame();
     await nextFrame();
-    const rect = el.getBoundingClientRect();
-    const reply = await send({
-      type: 'capture',
-      noteId,
-      rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
-      viewportWidth: innerWidth,
-    });
+    const rect = targetBox(el, area);
+    const reply: Reply = rect
+      ? await send({ type: 'capture', noteId, rect, viewportWidth: innerWidth })
+      : { ok: false, error: 'the element is not on the page' };
     host.style.visibility = '';
     if (!reply.ok) {
       setStatus(
@@ -473,7 +549,7 @@ function start(): void {
       editorText.focus();
       return;
     }
-    const { el, note, kind } = editing;
+    const { el, note, kind, area } = editing;
     const wantShot = editorShot.checked;
     closeEditor();
     setStatus('');
@@ -482,7 +558,7 @@ function start(): void {
     if (note && kind === 'not-fixed') {
       // An earlier screenshot stays in the record unless a new one replaces it.
       const updated = markNotFixed(note, text, now);
-      if (wantShot && el && (await takeShot(note.id, el))) {
+      if (wantShot && (await takeShot(note.id, el, area))) {
         updated.screenshot = true;
         shotCache.delete(note.id);
       }
@@ -491,7 +567,7 @@ function start(): void {
     }
     if (note) {
       const updated: Note = { ...editText(note, text, now), screenshot: note.screenshot && wantShot };
-      if (wantShot && !note.screenshot && el) updated.screenshot = await takeShot(note.id, el);
+      if (wantShot && !note.screenshot && (el || area)) updated.screenshot = await takeShot(note.id, el, area);
       if (!wantShot && note.screenshot) {
         await send({ type: 'delete-shot', noteId: note.id });
         shotCache.delete(note.id);
@@ -512,8 +588,9 @@ function start(): void {
       state: 'open',
       created: now,
       history: [{ type: 'created', at: now, text }],
+      ...(area ? { area } : {}),
     };
-    if (wantShot) created.screenshot = await takeShot(created.id, el);
+    if (wantShot) created.screenshot = await takeShot(created.id, el, area);
     await saveNotes([...notes, created]);
   }
 

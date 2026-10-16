@@ -50,13 +50,22 @@ problem is visual, gives the agent what it needs to find and fix each problem.
     mark it **not fixed** and add what is still wrong (the next prompt includes it
     again). You can add new notes in the same walk. The "fixed" marks give the
     dates of feature 8.
+14. **Drag a box: a note on an area.** Some problems belong to no single
+    element: a gap, a misalignment, a part made of several elements. In Add note
+    mode, press and drag to draw a box; a plain click still selects one element.
+    The note keeps the box (in page coordinates, with the window size), the
+    smallest element that holds the whole box, and the main elements inside it.
+    The marker and a dashed outline sit on the box, and the screenshot shows the
+    box with a margin.
 
 ## The prompt
 
 Markdown, one section for each page, one entry for each open note:
 
 - the page address and the window size,
-- the element: a selector that finds it, its tag, and the start of its text,
+- the element: a selector that finds it, its tag, and the start of its text;
+  for a note on an area, the size and place of the area, the element that holds
+  it, and the elements in it,
 - the note, and for a note marked not fixed, its earlier text and the new text,
 - the path of the screenshot file, when the note has one.
 

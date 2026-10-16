@@ -1,6 +1,6 @@
 // Builds the Markdown prompt for a coding agent from the open notes of a site.
 
-import { openNotes, type Note } from './note';
+import { openNotes, type ElementRef, type Note } from './note';
 
 export const PROMPT_INTRO =
   "These are problems that the site owner found on these pages. Fix each one in the site's code.";
@@ -11,6 +11,15 @@ export function codeSpan(value: string): string {
   const fence = '`'.repeat(longest + 1);
   const pad = value.startsWith('`') || value.endsWith('`') ? ' ' : '';
   return `${fence}${pad}${value}${pad}${fence}`;
+}
+
+function round(value: number): number {
+  return Math.round(value);
+}
+
+/** An element as the agent finds it: tag, selector and the start of its text. */
+function describe(ref: ElementRef): string {
+  return `${codeSpan(`<${ref.tag}>`)} found by ${codeSpan(ref.selector)}` + (ref.text ? `, text "${ref.text}"` : ', no text');
 }
 
 /** Puts a text with several lines under a list item. */
@@ -41,15 +50,17 @@ export function buildPrompt(notes: Note[], shotPaths: Record<string, string> = {
   for (const [url, entries] of pages) {
     lines.push('', `## Page: ${url}`);
     for (const { note, number } of entries) {
-      const element =
-        `${codeSpan(`<${note.tag}>`)} found by ${codeSpan(note.selector)}` +
-        (note.text ? `, text "${note.text}"` : ', no text');
-      lines.push(
-        '',
-        `### Note ${number}`,
-        `- Window: ${note.viewport.width} × ${note.viewport.height}`,
-        `- Element: ${element}`,
-      );
+      lines.push('', `### Note ${number}`, `- Window: ${note.viewport.width} × ${note.viewport.height}`);
+      if (note.area) {
+        const { page, inside } = note.area;
+        lines.push(
+          `- Area: ${round(page.width)} × ${round(page.height)} px at x ${round(page.x)}, y ${round(page.y)} of the page`,
+          `- Inside: ${describe(note)}`,
+        );
+        if (inside.length > 0) lines.push(`- In the area: ${inside.map(describe).join('; ')}`);
+      } else {
+        lines.push(`- Element: ${describe(note)}`);
+      }
       if (note.state === 'not-fixed' && note.previousNote) {
         lines.push(`- Earlier note: ${indented(note.previousNote)}`);
         lines.push(`- Still wrong: ${indented(note.note)}`);

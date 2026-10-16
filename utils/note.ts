@@ -12,6 +12,31 @@ export interface NoteEvent {
   text?: string;
 }
 
+/** A box in CSS pixels. */
+export interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** What finds an element again: its selector, its tag, and the start of its text. */
+export interface ElementRef {
+  selector: string;
+  tag: string;
+  text: string;
+}
+
+/** The area of a note made by dragging a box; the note's element holds the whole box. */
+export interface NoteArea {
+  /** The box in page coordinates: CSS pixels from the top left of the page. */
+  page: Box;
+  /** The box relative to the top left of the note's element, to place it again when the page moves. */
+  offset: Box;
+  /** The main elements inside the box. */
+  inside: ElementRef[];
+}
+
 export interface Note {
   id: string;
   /** Page address without the hash. */
@@ -32,6 +57,8 @@ export interface Note {
   previousNote?: string;
   /** Every step of the note, oldest first. Notes saved before the record have none. */
   history?: NoteEvent[];
+  /** Set for a note on a dragged area; selector, tag and text then name the element that holds it. */
+  area?: NoteArea;
 }
 
 /** The record of a note; a note saved before the record starts with its creation. */

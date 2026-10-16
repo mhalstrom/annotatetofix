@@ -43,7 +43,9 @@ signs the add-on for your own use with `web-ext sign` (see docs/plan.md).
    (or press Alt+Shift+A). The first time on a site, the browser asks for
    access to that site. The notes panel opens at the bottom right.
 2. Click **Add note**, then click the element that has the problem. Links and
-   buttons do not react while you select. Press Esc to stop.
+   buttons do not react while you select. Press Esc to stop. For a problem
+   that is not one element (a gap, a misalignment, a group of elements), press
+   and drag to draw a box around the area instead.
 3. Write what is wrong. Tick **Screenshot of the element** when the problem is
    visual. Save (or press Ctrl+Enter / ⌘Enter).
 4. Each note gets a numbered marker on its element. Click a marker or **Edit**
