@@ -13,7 +13,7 @@ Needs Node.js 20 or later.
 
 ```sh
 npm install
-npm run build      # both browsers: .output/chrome-mv3 and .output/firefox-mv3
+npm run build      # both browsers: dist/chrome-mv3 and dist/firefox-mv3
 npm test           # unit tests of the selector and the prompt text
 ```
 
@@ -26,7 +26,7 @@ add-on loaded and rebuild it when a file changes.
 
 1. Run `npm run build`.
 2. Open `about:debugging#/runtime/this-firefox`.
-3. Click **Load Temporary Add-on…** and select `.output/firefox-mv3/manifest.json`.
+3. Click **Load Temporary Add-on…** and select `dist/firefox-mv3/manifest.json`.
 
 A temporary add-on stays until Firefox closes. For a permanent install, Mozilla
 signs the add-on for your own use with `web-ext sign` (see docs/plan.md).
@@ -35,7 +35,7 @@ signs the add-on for your own use with `web-ext sign` (see docs/plan.md).
 
 1. Run `npm run build`.
 2. Open `chrome://extensions` and turn on **Developer mode**.
-3. Click **Load unpacked** and select the folder `.output/chrome-mv3`.
+3. Click **Load unpacked** and select the folder `dist/chrome-mv3`.
 
 ## Use it
 

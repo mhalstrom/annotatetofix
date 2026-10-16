@@ -3,6 +3,8 @@ import { defineConfig } from 'wxt';
 // One code base for Chrome and Firefox, Manifest V3 in both.
 export default defineConfig({
   manifestVersion: 3,
+  // A visible folder: the Mac file window of Firefox hides folders that start with a dot.
+  outDir: 'dist',
   manifest: ({ browser }) => ({
     name: 'annotatetofix',
     description:
