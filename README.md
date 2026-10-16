@@ -14,7 +14,7 @@ Needs Node.js 20 or later.
 ```sh
 npm install
 npm run build      # both browsers: dist/chrome-mv3 and dist/firefox-mv3
-npm test           # unit tests of the selector and the prompt text
+npm test           # unit tests of the selector, the prompt text and the note record
 ```
 
 `npm run dev` (Chrome) and `npm run dev:firefox` start a browser with the
@@ -54,6 +54,23 @@ signs the add-on for your own use with `web-ext sign` (see docs/plan.md).
    and the note. The screenshots go to `Downloads/annotatetofix/<site>/`, and
    the prompt names each file.
 6. Paste the prompt into your coding agent.
+
+### Check the work
+
+After the agent works, open the page again and click **Check**. The panel
+shows the notes of the page on their elements, each with the date it was made
+and the dates it went out in a prompt, and its screenshot. For each note:
+
+- **Fixed**: the note leaves the next prompt. It stays in the list under
+  **Fixed on this page**, with the date.
+- **Not fixed**: write what is still wrong (tick the box for a new
+  screenshot). The next prompt holds the note again, with the earlier text and
+  the new text.
+
+When a fixed problem comes back, click **Not fixed** on it under **Fixed on
+this page**. **Add note** still adds new notes while you check. When an
+element is gone from the page, its note says so. Check mode stays on through a
+reload and on the other pages of the site; **Done checking** ends it.
 
 **Hide** closes the panel and the markers until the next click on the toolbar
 button. **Turn off on this site** removes the add-on's access to the site; the

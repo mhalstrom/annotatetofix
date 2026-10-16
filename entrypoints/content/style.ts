@@ -42,6 +42,23 @@ ol.notes li { display: flex; gap: 6px; align-items: baseline; padding: 6px 0; bo
 ol.notes .num { font-weight: 700; color: #e5484d; min-width: 18px; }
 ol.notes .text { flex: 1; white-space: pre-wrap; word-break: break-word; }
 ol.notes .warn { color: #a15c00; font-size: 12px; }
+button.on { background: #1c1c1c; border-color: #1c1c1c; color: #fff; }
+button.small { padding: 2px 7px; font-size: 12px; }
+button.ok { border-color: #2f9e55; color: #1d7a3e; }
+.pair { display: flex; gap: 4px; flex-shrink: 0; }
+.hint { padding: 0 10px 6px; color: #555; font-size: 12px; }
+.hint[hidden] { display: none; }
+.earlier { color: #777; font-size: 12px; text-decoration: line-through; }
+.editor .earlier { margin-bottom: 6px; text-decoration: none; }
+.editor .earlier[hidden] { display: none; }
+.hist { color: #777; font-size: 11px; margin-top: 2px; }
+img.thumb { display: block; max-width: 100%; max-height: 64px; margin-top: 4px; border: 1px solid #e0e0e0; border-radius: 4px; cursor: zoom-in; }
+img.thumb.large { max-height: none; cursor: zoom-out; }
+ol.notes li.section { display: block; padding: 8px 0 4px; color: #555; font-weight: 600; border-top: 1px solid #e4e4e4; }
+ol.notes li.done .num { color: #2f9e55; }
+ol.notes li.done .text { color: #555; }
+ol.notes li.flash { animation: flash 1.2s ease-out; }
+@keyframes flash { from { background: #ffe9a8; } to { background: transparent; } }
 .foot { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-top: 1px solid #eee; color: #555; }
 textarea {
   width: 100%; min-height: 72px; resize: vertical; padding: 6px; border: 1px solid #c8c8c8; border-radius: 6px;

@@ -1,5 +1,18 @@
 import { errorText, type Reply, type Request, type ToContent } from '@/utils/messages';
-import { newId, notesKey, openNotes, pageUrl, type Note } from '@/utils/note';
+import {
+  editText,
+  fixedNotes,
+  historyOf,
+  markFixed,
+  markNotFixed,
+  markSent,
+  newId,
+  notesKey,
+  openNotes,
+  pageUrl,
+  type Note,
+  type NoteEvent,
+} from '@/utils/note';
 import { buildPrompt, numberByPage } from '@/utils/prompt';
 import { elementText, findElement, getSelector } from '@/utils/selector';
 import { STYLE } from './style';
@@ -26,11 +39,33 @@ interface Marker {
   el: Element | null;
   foundBy: string;
   badge: HTMLElement;
+  item?: HTMLElement;
 }
 
 interface Editing {
   el: Element | null;
   note: Note | null;
+  /** 'not-fixed' asks what is still wrong with an earlier note. */
+  kind: 'note' | 'not-fixed';
+}
+
+const EVENT_WORDS: Record<NoteEvent['type'], string> = {
+  created: 'noted',
+  edited: 'edited',
+  sent: 'sent',
+  fixed: 'fixed',
+  'not-fixed': 'not fixed',
+};
+
+function when(at: string): string {
+  return new Date(at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+/** One line with every step of a note, for example "noted Oct 16, 2:05 PM · sent Oct 16, 2:30 PM". */
+function historyLine(note: Note): string {
+  return historyOf(note)
+    .map((e) => `${EVENT_WORDS[e.type]} ${when(e.at)}`)
+    .join(' · ');
 }
 
 function h<K extends keyof HTMLElementTagNameMap>(
@@ -57,8 +92,12 @@ function nextFrame(): Promise<void> {
 function start(): void {
   const origin = location.origin;
   const panelKey = `panel:${origin}`;
+  const checkKey = `check:${origin}`;
   let notes: Note[] = [];
   let panelOpen = false;
+  let checking = false;
+  /** Screenshot data URLs by note id, read once from the background script. */
+  const shotCache = new Map<string, string>();
   let picking = false;
   let editing: Editing | null = null;
   let markers: Marker[] = [];
@@ -76,6 +115,16 @@ function start(): void {
   const copyBox = h('div', { className: 'copybox', hidden: true });
   const addButton = h('button', { className: 'primary', type: 'button' }, 'Add note');
   const copyButton = h('button', { type: 'button' }, 'Copy prompt');
+  const checkButton = h(
+    'button',
+    { type: 'button', title: 'Mark the earlier notes of this page fixed or not fixed' },
+    'Check',
+  );
+  const hint = h(
+    'div',
+    { className: 'hint', hidden: true },
+    'Check mode: mark each note Fixed or Not fixed. Add note still adds new notes.',
+  );
   const closeButton = h('button', { className: 'link', type: 'button', title: 'Hide the panel and markers' }, 'Hide');
   const offButton = h('button', { className: 'link', type: 'button' }, 'Turn off on this site');
   const footText = h('span');
@@ -83,7 +132,8 @@ function start(): void {
     'div',
     { className: 'panel', hidden: true },
     h('div', { className: 'head' }, h('strong', {}, 'annotatetofix'), closeButton),
-    h('div', { className: 'actions' }, addButton, copyButton),
+    h('div', { className: 'actions' }, addButton, copyButton, checkButton),
+    hint,
     status,
     copyBox,
     list,
@@ -93,6 +143,8 @@ function start(): void {
   const editorTarget = h('div', { className: 'target' });
   const editorText = h('textarea', { placeholder: 'What is wrong here?' });
   const editorShot = h('input', { type: 'checkbox' });
+  const editorShotLabel = h('span', {}, 'Screenshot of the element');
+  const editorEarlier = h('div', { className: 'earlier', hidden: true });
   const deleteButton = h('button', { type: 'button' }, 'Delete');
   const cancelButton = h('button', { type: 'button' }, 'Cancel');
   const saveButton = h('button', { className: 'primary', type: 'button' }, 'Save');
@@ -100,8 +152,9 @@ function start(): void {
     'div',
     { className: 'editor', hidden: true },
     editorTarget,
+    editorEarlier,
     editorText,
-    h('label', {}, editorShot, 'Screenshot of the element'),
+    h('label', {}, editorShot, editorShotLabel),
     h('div', { className: 'row' }, deleteButton, h('span', { className: 'spacer' }), cancelButton, saveButton),
   );
 
@@ -159,7 +212,11 @@ function start(): void {
       for (const { note, number } of pageEntries()) {
         const found = findElement(document, note);
         const badge = h('div', { className: 'marker', title: note.note }, String(number));
-        badge.addEventListener('click', () => openEditor(markerFor(note.id)?.el ?? null, note));
+        badge.addEventListener('click', () => {
+          const marker = markerFor(note.id);
+          if (checking) flash(marker?.item);
+          else openEditor(marker?.el ?? null, note);
+        });
         markerLayer.append(badge);
         markers.push({ note, number, el: found.el, foundBy: found.foundBy, badge });
       }
@@ -174,29 +231,28 @@ function start(): void {
           : marker.foundBy === 'selector-text-changed'
             ? 'The element text changed.'
             : '';
-      const edit = h('button', { className: 'link', type: 'button' }, 'Edit');
-      edit.addEventListener('click', () => {
-        marker.el?.scrollIntoView({ block: 'center' });
-        openEditor(marker.el, marker.note);
-      });
-      const remove = h('button', { className: 'link', type: 'button' }, 'Delete');
-      remove.addEventListener('click', () => void deleteNote(marker.note));
-      list.append(
-        h(
-          'li',
-          {},
-          h('span', { className: 'num' }, String(marker.number)),
-          h(
-            'span',
-            { className: 'text' },
-            marker.note.note + (marker.note.screenshot ? '  📷' : ''),
-            ...(warning ? [h('div', { className: 'warn' }, warning)] : []),
-          ),
-          edit,
-          remove,
-        ),
+      const buttons = checking ? checkButtons(marker) : editButtons(marker);
+      const details: (Node | string)[] = [];
+      if (checking && marker.note.state === 'not-fixed' && marker.note.previousNote) {
+        details.push(h('div', { className: 'earlier' }, `Earlier: ${marker.note.previousNote}`));
+      }
+      details.push(marker.note.note + (marker.note.screenshot && !checking ? '  📷' : ''));
+      if (warning) details.push(h('div', { className: 'warn' }, warning));
+      if (checking) details.push(...recordOf(marker.note));
+      marker.item = h(
+        'li',
+        {},
+        h('span', { className: 'num' }, String(marker.number)),
+        h('span', { className: 'text' }, ...details),
+        ...buttons,
       );
+      list.append(marker.item);
     }
+    if (checking) renderFixed();
+
+    hint.hidden = !checking;
+    checkButton.classList.toggle('on', checking);
+    checkButton.textContent = checking ? 'Done checking' : 'Check';
 
     const open = openNotes(notes);
     const elsewhere = open.filter((n) => n.url !== currentUrl).length;
@@ -207,6 +263,82 @@ function start(): void {
 
   function markerFor(noteId: string): Marker | undefined {
     return markers.find((m) => m.note.id === noteId);
+  }
+
+  function editButtons(marker: Marker): HTMLElement[] {
+    const edit = h('button', { className: 'link', type: 'button' }, 'Edit');
+    edit.addEventListener('click', () => {
+      marker.el?.scrollIntoView({ block: 'center' });
+      openEditor(marker.el, marker.note);
+    });
+    const remove = h('button', { className: 'link', type: 'button' }, 'Delete');
+    remove.addEventListener('click', () => void deleteNote(marker.note));
+    return [edit, remove];
+  }
+
+  function checkButtons(marker: Marker): HTMLElement[] {
+    const fixed = h('button', { className: 'small ok', type: 'button' }, 'Fixed');
+    fixed.addEventListener('click', () => void setFixed(marker.note));
+    const notFixed = h('button', { className: 'small', type: 'button' }, 'Not fixed');
+    notFixed.addEventListener('click', () => {
+      marker.el?.scrollIntoView({ block: 'center' });
+      openEditor(marker.el, marker.note, 'not-fixed');
+    });
+    return [h('span', { className: 'pair' }, fixed, notFixed)];
+  }
+
+  /** The dates of a note and its screenshot, as the record shows them in check mode. */
+  function recordOf(note: Note): HTMLElement[] {
+    const parts: HTMLElement[] = [h('div', { className: 'hist' }, historyLine(note))];
+    if (note.screenshot) parts.push(thumbnail(note.id));
+    return parts;
+  }
+
+  function thumbnail(noteId: string): HTMLImageElement {
+    const img = h('img', { className: 'thumb', alt: 'Screenshot of the element' });
+    const cached = shotCache.get(noteId);
+    if (cached) img.src = cached;
+    else
+      void send({ type: 'get-shot', noteId }).then((reply) => {
+        if (reply.ok && reply.image) {
+          shotCache.set(noteId, reply.image);
+          img.src = reply.image;
+        } else img.remove();
+      });
+    img.addEventListener('click', () => img.classList.toggle('large'));
+    return img;
+  }
+
+  /** The fixed notes of this page, with a way to say that a problem came back. */
+  function renderFixed(): void {
+    const done = fixedNotes(notes, currentUrl);
+    if (done.length === 0) return;
+    list.append(h('li', { className: 'section' }, `Fixed on this page (${done.length})`));
+    for (const note of done) {
+      const again = h('button', { className: 'small', type: 'button', title: 'The problem came back' }, 'Not fixed');
+      again.addEventListener('click', () => {
+        const el = findElement(document, note).el;
+        el?.scrollIntoView({ block: 'center' });
+        openEditor(el, note, 'not-fixed');
+      });
+      list.append(
+        h(
+          'li',
+          { className: 'done' },
+          h('span', { className: 'num' }, '✓'),
+          h('span', { className: 'text' }, note.note, ...recordOf(note)),
+          again,
+        ),
+      );
+    }
+  }
+
+  function flash(item: HTMLElement | undefined): void {
+    if (!item) return;
+    item.scrollIntoView({ block: 'nearest' });
+    item.classList.remove('flash');
+    void item.offsetWidth;
+    item.classList.add('flash');
   }
 
   // ---- Selecting an element --------------------------------------------
@@ -272,15 +404,21 @@ function start(): void {
 
   // ---- The note box ----------------------------------------------------
 
-  function openEditor(el: Element | null, note: Note | null): void {
+  function openEditor(el: Element | null, note: Note | null, kind: Editing['kind'] = 'note'): void {
     stopPicking();
-    editing = { el, note };
+    editing = { el, note, kind };
     const tag = note?.tag ?? el?.tagName.toLowerCase() ?? '?';
     const text = note?.text ?? (el ? elementText(el) : '');
     editorTarget.textContent = `<${tag}>${text ? ` "${text}"` : ''}`;
-    editorText.value = note?.note ?? '';
-    editorShot.checked = note?.screenshot ?? false;
-    deleteButton.hidden = !note;
+    const notFixed = kind === 'not-fixed';
+    editorEarlier.hidden = !notFixed;
+    editorEarlier.textContent = notFixed && note ? `Earlier: ${note.note}` : '';
+    editorText.placeholder = notFixed ? 'What is still wrong?' : 'What is wrong here?';
+    editorText.value = notFixed ? '' : (note?.note ?? '');
+    editorShotLabel.textContent = notFixed && note?.screenshot ? 'New screenshot of the element' : 'Screenshot of the element';
+    editorShot.checked = notFixed ? false : (note?.screenshot ?? false);
+    editorShot.disabled = notFixed && !el;
+    deleteButton.hidden = !note || notFixed;
     editor.hidden = false;
     placeEditor();
     editorText.focus();
@@ -335,15 +473,29 @@ function start(): void {
       editorText.focus();
       return;
     }
-    const { el, note } = editing;
+    const { el, note, kind } = editing;
     const wantShot = editorShot.checked;
     closeEditor();
     setStatus('');
+    const now = new Date().toISOString();
 
+    if (note && kind === 'not-fixed') {
+      // An earlier screenshot stays in the record unless a new one replaces it.
+      const updated = markNotFixed(note, text, now);
+      if (wantShot && el && (await takeShot(note.id, el))) {
+        updated.screenshot = true;
+        shotCache.delete(note.id);
+      }
+      await saveNotes(notes.map((n) => (n.id === note.id ? updated : n)));
+      return;
+    }
     if (note) {
-      const updated: Note = { ...note, note: text, screenshot: note.screenshot && wantShot };
+      const updated: Note = { ...editText(note, text, now), screenshot: note.screenshot && wantShot };
       if (wantShot && !note.screenshot && el) updated.screenshot = await takeShot(note.id, el);
-      if (!wantShot && note.screenshot) await send({ type: 'delete-shot', noteId: note.id });
+      if (!wantShot && note.screenshot) {
+        await send({ type: 'delete-shot', noteId: note.id });
+        shotCache.delete(note.id);
+      }
       await saveNotes(notes.map((n) => (n.id === note.id ? updated : n)));
       return;
     }
@@ -358,7 +510,8 @@ function start(): void {
       note: text,
       screenshot: false,
       state: 'open',
-      created: new Date().toISOString(),
+      created: now,
+      history: [{ type: 'created', at: now, text }],
     };
     if (wantShot) created.screenshot = await takeShot(created.id, el);
     await saveNotes([...notes, created]);
@@ -366,7 +519,13 @@ function start(): void {
 
   async function deleteNote(note: Note): Promise<void> {
     if (note.screenshot) await send({ type: 'delete-shot', noteId: note.id });
+    shotCache.delete(note.id);
     await saveNotes(notes.filter((n) => n.id !== note.id));
+  }
+
+  async function setFixed(note: Note): Promise<void> {
+    const updated = markFixed(note, new Date().toISOString());
+    await saveNotes(notes.map((n) => (n.id === note.id ? updated : n)));
   }
 
   saveButton.addEventListener('click', () => void saveEditor());
@@ -416,7 +575,10 @@ function start(): void {
     }
     const text = buildPrompt(notes, paths);
     const pages = numberByPage(notes).size;
-    if (await copyText(text)) {
+    const copied = await copyText(text);
+    // The record says when each note went out; the text box counts too, as its text is ready to copy.
+    await saveNotes(markSent(notes, open.map((n) => n.id), new Date().toISOString()));
+    if (copied) {
       const shots = Object.keys(paths).length;
       setStatus(
         `Copied: ${open.length} note${open.length === 1 ? '' : 's'} on ${pages} page${pages === 1 ? '' : 's'}` +
@@ -429,6 +591,7 @@ function start(): void {
 
   addButton.addEventListener('click', () => (picking ? stopPicking() : startPicking()));
   copyButton.addEventListener('click', () => void copyPrompt());
+  checkButton.addEventListener('click', () => void setChecking(!checking));
   closeButton.addEventListener('click', () => void setPanel(false));
   offButton.addEventListener('click', () => void turnOff());
 
@@ -438,6 +601,14 @@ function start(): void {
     panelOpen = open;
     if (!open) closeEditor();
     await browser.storage.local.set({ [panelKey]: open });
+    render();
+  }
+
+  /** Check mode stays on through a reload and on the other pages of the site. */
+  async function setChecking(on: boolean): Promise<void> {
+    checking = on;
+    closeEditor();
+    await browser.storage.local.set({ [checkKey]: on });
     render();
   }
 
@@ -466,9 +637,10 @@ function start(): void {
   };
   browser.storage.onChanged.addListener(onStorage);
 
-  const ready = browser.storage.local.get([notesKey(origin), panelKey]).then((stored) => {
+  const ready = browser.storage.local.get([notesKey(origin), panelKey, checkKey]).then((stored) => {
     notes = (stored[notesKey(origin)] as Note[] | undefined) ?? [];
     panelOpen = stored[panelKey] === true;
+    checking = stored[checkKey] === true;
     render();
   });
 

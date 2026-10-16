@@ -156,6 +156,10 @@ async function handle(request: Request, sender: { tab?: { windowId?: number; url
     case 'delete-shot':
       await deleteShot(request.noteId);
       return { ok: true };
+    case 'get-shot': {
+      const image = await getShot(request.noteId);
+      return image ? { ok: true, image: await blobToDataUrl(image) } : { ok: false, error: 'no screenshot' };
+    }
     case 'disable-site': {
       const pattern = sender.tab?.url ? sitePattern(sender.tab.url) : null;
       if (!pattern) return { ok: false, error: 'no site' };

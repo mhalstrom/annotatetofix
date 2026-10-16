@@ -13,11 +13,13 @@ export type Request =
   /** Save the kept screenshots as files; the reply maps each note id to its path. */
   | { type: 'save-shots'; host: string; noteIds: string[] }
   | { type: 'delete-shot'; noteId: string }
+  /** The kept screenshot of a note as a data URL, for the record in check mode. */
+  | { type: 'get-shot'; noteId: string }
   /** Turn the add-on off for the site of the sending tab. */
   | { type: 'disable-site' };
 
 export type Reply =
-  | { ok: true; paths?: Record<string, string> }
+  | { ok: true; paths?: Record<string, string>; image?: string }
   | { ok: false; error: string };
 
 /** From the background script to the content script. */

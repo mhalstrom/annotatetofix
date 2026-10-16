@@ -3,6 +3,15 @@
 
 export type NoteState = 'open' | 'fixed' | 'not-fixed';
 
+/** One step in the record of a note. */
+export interface NoteEvent {
+  type: 'created' | 'edited' | 'sent' | 'fixed' | 'not-fixed';
+  /** ISO date and time. */
+  at: string;
+  /** For 'created', 'edited' and 'not-fixed': the text of the note after this step. */
+  text?: string;
+}
+
 export interface Note {
   id: string;
   /** Page address without the hash. */
@@ -21,6 +30,53 @@ export interface Note {
   created: string;
   /** For a note marked not fixed: the text it had before. */
   previousNote?: string;
+  /** Every step of the note, oldest first. Notes saved before the record have none. */
+  history?: NoteEvent[];
+}
+
+/** The record of a note; a note saved before the record starts with its creation. */
+export function historyOf(note: Note): NoteEvent[] {
+  return note.history ?? [{ type: 'created', at: note.created, text: note.note }];
+}
+
+function withEvent(note: Note, event: NoteEvent): Note {
+  return { ...note, history: [...historyOf(note), event] };
+}
+
+/** A change of the text by hand; no step when the text stays the same. */
+export function editText(note: Note, text: string, at: string): Note {
+  if (text === note.note) return note;
+  return withEvent({ ...note, note: text }, { type: 'edited', at, text });
+}
+
+/** Records that the notes with these ids went out in a prompt. */
+export function markSent(notes: Note[], ids: string[], at: string): Note[] {
+  const sent = new Set(ids);
+  return notes.map((n) => (sent.has(n.id) ? withEvent(n, { type: 'sent', at }) : n));
+}
+
+export function markFixed(note: Note, at: string): Note {
+  return withEvent({ ...note, state: 'fixed' }, { type: 'fixed', at });
+}
+
+/** The problem is still there, or came back: the next prompt asks again, with both texts. */
+export function markNotFixed(note: Note, text: string, at: string): Note {
+  return withEvent(
+    { ...note, state: 'not-fixed', previousNote: note.note, note: text },
+    { type: 'not-fixed', at, text },
+  );
+}
+
+/** The time of the last step of this type, if any. */
+export function lastEvent(note: Note, type: NoteEvent['type']): string | undefined {
+  return historyOf(note).filter((e) => e.type === type).at(-1)?.at;
+}
+
+/** Fixed notes of a page, the last fixed first. */
+export function fixedNotes(notes: Note[], url: string): Note[] {
+  return notes
+    .filter((n) => n.url === url && n.state === 'fixed')
+    .sort((a, b) => (lastEvent(b, 'fixed') ?? '').localeCompare(lastEvent(a, 'fixed') ?? ''));
 }
 
 export function notesKey(origin: string): string {
