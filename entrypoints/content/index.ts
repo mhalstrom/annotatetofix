@@ -156,6 +156,11 @@ function start(): void {
   );
   const closeButton = h('button', { className: 'link', type: 'button', title: 'Hide the panel and markers' }, 'Hide');
   const offButton = h('button', { className: 'link', type: 'button' }, 'Turn off on this site');
+  const mapButton = h(
+    'button',
+    { className: 'link', type: 'button', title: 'Each page with the date of its last fixed note' },
+    'Site map',
+  );
   const footText = h('span');
   const panel = h(
     'div',
@@ -166,7 +171,7 @@ function start(): void {
     status,
     copyBox,
     list,
-    h('div', { className: 'foot' }, footText, offButton),
+    h('div', { className: 'foot' }, footText, h('span', { className: 'spacer' }), mapButton, offButton),
   );
 
   const editorTarget = h('div', { className: 'target' });
@@ -669,6 +674,11 @@ function start(): void {
   addButton.addEventListener('click', () => (picking ? stopPicking() : startPicking()));
   copyButton.addEventListener('click', () => void copyPrompt());
   checkButton.addEventListener('click', () => void setChecking(!checking));
+  mapButton.addEventListener('click', () => {
+    void send({ type: 'open-sitemap', origin }).then((reply) => {
+      if (!reply.ok) setStatus(`The site map did not open (${reply.error}).`, true);
+    });
+  });
   closeButton.addEventListener('click', () => void setPanel(false));
   offButton.addEventListener('click', () => void turnOff());
 

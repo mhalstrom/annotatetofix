@@ -160,6 +160,9 @@ async function handle(request: Request, sender: { tab?: { windowId?: number; url
       const image = await getShot(request.noteId);
       return image ? { ok: true, image: await blobToDataUrl(image) } : { ok: false, error: 'no screenshot' };
     }
+    case 'open-sitemap':
+      await browser.tabs.create({ url: `${browser.runtime.getURL('/sitemap.html')}#${encodeURIComponent(request.origin)}` });
+      return { ok: true };
     case 'disable-site': {
       const pattern = sender.tab?.url ? sitePattern(sender.tab.url) : null;
       if (!pattern) return { ok: false, error: 'no site' };

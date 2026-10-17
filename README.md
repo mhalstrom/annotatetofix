@@ -74,6 +74,14 @@ this page**. **Add note** still adds new notes while you check. When an
 element is gone from the page, its note says so. Check mode stays on through a
 reload and on the other pages of the site; **Done checking** ends it.
 
+### Site map
+
+**Site map** at the bottom of the panel opens a page with one list for each
+site: each page that has a note, with the date of its last fixed note and its
+open notes. When the site has a `sitemap.xml`, its pages are in the list too,
+and a page with no note says "never checked". The pages checked longest ago
+come first.
+
 **Hide** closes the panel and the markers until the next click on the toolbar
 button. **Turn off on this site** removes the add-on's access to the site; the
 notes stay.
@@ -91,4 +99,5 @@ When a screenshot fails, the panel says so and the note is kept without one.
 - `storage`: keep the notes.
 - `downloads`: save the screenshots as files that the prompt can name.
 - `scripting`: show the panel and the markers on the sites you turned on.
-- Access to a site only when you turn the add-on on for it.
+- Access to a site only when you turn the add-on on for it. The site map uses
+  it to read the site's `sitemap.xml`.

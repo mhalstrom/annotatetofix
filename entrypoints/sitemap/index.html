@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>annotatetofix: site map</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fff;
+        --fg: #1c1c1c;
+        --muted: #666;
+        --line: #e4e4e4;
+        --accent: #e5484d;
+        --never: #a15c00;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #161616;
+          --fg: #ececec;
+          --muted: #a0a0a0;
+          --line: #2c2c2c;
+          --never: #e0a050;
+        }
+      }
+      body {
+        margin: 0;
+        padding: 24px 16px 48px;
+        background: var(--bg);
+        color: var(--fg);
+        font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      main { max-width: 860px; margin: 0 auto; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      h2 { font-size: 16px; margin: 32px 0 4px; }
+      p.lead, p.info { color: var(--muted); margin: 0 0 12px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+      th { color: var(--muted); font-weight: 600; font-size: 12px; }
+      td.num { text-align: right; width: 80px; }
+      td.when { width: 180px; white-space: nowrap; }
+      td.page { word-break: break-all; }
+      .never { color: var(--never); }
+      .muted { color: var(--muted); }
+      a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Site map</h1>
+      <p class="lead">
+        Each page with the date of its last fixed note. The pages checked longest ago come first. Pages of the
+        site's sitemap.xml with no note say "never checked".
+      </p>
+      <div id="sites"></div>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

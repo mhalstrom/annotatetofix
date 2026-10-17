@@ -36,6 +36,9 @@ problem is visual, gives the agent what it needs to find and fix each problem.
    which pages you worked on and which pages nobody checked for a long time. The
    list holds each page that has a note. When the site has a `sitemap.xml`, the
    list also holds its pages, with "never checked" for a page with no note.
+   The **Site map** link of the panel opens it on a page of the add-on, one list
+   for each site, the pages checked longest ago first. (The toolbar button
+   keeps its one job, to show or hide the panel, so there is no popup.)
 9. **Notes stay through a reload and a move to another page.** A reload or a
    wrong click deletes no note.
 10. **Each note records the page address and the window size.** The agent opens

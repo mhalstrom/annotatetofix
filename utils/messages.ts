@@ -15,6 +15,8 @@ export type Request =
   | { type: 'delete-shot'; noteId: string }
   /** The kept screenshot of a note as a data URL, for the record in check mode. */
   | { type: 'get-shot'; noteId: string }
+  /** Open the site map page in a new tab, with this site first. */
+  | { type: 'open-sitemap'; origin: string }
   /** Turn the add-on off for the site of the sending tab. */
   | { type: 'disable-site' };
 

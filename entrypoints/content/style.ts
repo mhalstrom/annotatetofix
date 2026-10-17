@@ -68,7 +68,8 @@ ol.notes li.done .num { color: #2f9e55; }
 ol.notes li.done .text { color: #555; }
 ol.notes li.flash { animation: flash 1.2s ease-out; }
 @keyframes flash { from { background: #ffe9a8; } to { background: transparent; } }
-.foot { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-top: 1px solid #eee; color: #555; }
+.foot { display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-top: 1px solid #eee; color: #555; }
+.foot .spacer { flex: 1; }
 textarea {
   width: 100%; min-height: 72px; resize: vertical; padding: 6px; border: 1px solid #c8c8c8; border-radius: 6px;
   color: #1c1c1c; background: #fff;
